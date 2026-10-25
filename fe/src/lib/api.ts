@@ -112,14 +112,41 @@ export type User = {
   avatarUrl: string | null;
   provider: "local" | "google";
   isVerified: boolean;
+  twoStepVerification: "enabled" | "disabled";
 };
-export type Message = { id: string; content: string; createdAt: string };
+export type Person = { id: string; name: string; avatarUrl: string | null; publicId: string };
+export type RevealState = "none" | "pending" | "accepted" | "declined";
+export type Message = {
+  id: string;
+  content: string;
+  createdAt: string;
+  reveal: RevealState;
+  from: Person | null; // only set when the sender agreed to be identified
+  conversationId: string | null;
+};
+export type LoginResult = { user: User } | { twoStep: true; email: string };
+export type IncomingRequest = {
+  id: string;
+  createdAt: string;
+  requester: Person;
+  message: { id: string; content: string; createdAt: string };
+};
+export type ConversationSummary = { id: string; lastMessageAt: string; other: Person };
+export type ThreadMessage = { id: string; content: string; createdAt: string; mine: boolean };
+export type ThreadPage = { data: ThreadMessage[]; nextCursor: string | null; other: Person | null };
 export type MessagePage = { data: Message[]; nextCursor: string | null };
 
 export const endpoints = {
   me: () => api<{ data: User }>("/user/me").then((r) => r.data),
-  login: (email: string, password: string) =>
-    api<{ data: { user: User } }>("/auth/login", { method: "POST", body: { email, password } }).then((r) => r.data.user),
+  // With two-step verification ON the backend answers 200 WITHOUT cookies and asks for an emailed code.
+  login: (email: string, password: string): Promise<LoginResult> =>
+    api<{ requiresTwoStepVerification?: boolean; email?: string; data?: { user: User } }>("/auth/login", {
+      method: "POST",
+      body: { email, password },
+    }).then((r) => (r.requiresTwoStepVerification ? { twoStep: true as const, email: r.email ?? email } : { user: r.data!.user })),
+  verifyLoginOtp: (email: string, otp: string) =>
+    api<{ data: { user: User } }>("/auth/verify-login-otp", { method: "POST", body: { email, otp } }).then((r) => r.data.user),
+  toggleTwoStep: () => api<{ message: string }>("/auth/two-step-verification", { method: "PATCH" }),
   google: (idToken: string) =>
     api<{ data: { user: User } }>("/auth/login-google", { method: "POST", body: { idToken } }).then((r) => r.data.user),
   register: (name: string, email: string, password: string) =>
@@ -146,4 +173,20 @@ export const endpoints = {
   deleteMessage: (id: string) => api<{ message: string }>(`/message/${id}`, { method: "DELETE" }),
   sendMessage: (receiver: string, content: string) =>
     api<{ message: string }>("/message", { method: "POST", body: { receiver, content } }),
+
+  // ---- "Who sent this?" requests ----
+  requestReveal: (messageId: string) =>
+    api<{ data: { status: RevealState } }>("/reveal-requests", { method: "POST", body: { messageId } }).then((r) => r.data.status),
+  incomingRequests: () => api<{ data: IncomingRequest[] }>("/reveal-requests").then((r) => r.data),
+  pendingCount: () => api<{ data: { count: number } }>("/reveal-requests/pending-count").then((r) => r.data.count),
+  acceptRequest: (id: string) =>
+    api<{ data: { conversationId: string } }>(`/reveal-requests/${id}/accept`, { method: "POST" }).then((r) => r.data),
+  declineRequest: (id: string) => api<{ message: string }>(`/reveal-requests/${id}/decline`, { method: "POST" }),
+
+  // ---- conversations ----
+  conversations: () => api<{ data: ConversationSummary[] }>("/conversations").then((r) => r.data),
+  thread: (id: string, cursor?: string | null) =>
+    api<ThreadPage>(`/conversations/${id}/messages?limit=30${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+  sendInThread: (id: string, content: string) =>
+    api<{ data: ThreadMessage }>(`/conversations/${id}/messages`, { method: "POST", body: { content } }).then((r) => r.data),
 };

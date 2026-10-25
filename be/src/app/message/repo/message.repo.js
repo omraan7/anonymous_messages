@@ -4,12 +4,12 @@ import { Message } from "./../model/message.model.js";
 export const saveMessageInDb = (content, receiver, sender) =>
   Message.create({ content, receiver, ...(sender ? { sender } : {}) });
 
-// Cursor pagination (newest first). `sender` is select:false in the schema and is
-// never populated here, so recipients cannot learn who wrote a message.
+// Cursor pagination (newest first). `sender` is loaded ONLY so the service can check whether that
+// sender consented to be revealed; it is stripped by `decorateInbox` and never sent to the client.
 export const getAllMessagesByUserId = async (userId, { limit, cursor }) => {
-  const filter = { receiver: userId, isDeleted: false };
+  const filter = { receiver: userId, isDeleted: false, conversation: null };
   if (cursor) filter._id = trusted({ $lt: cursor });
-  const rows = await Message.find(filter, "content createdAt").sort({ _id: -1 }).limit(limit + 1).lean();
+  const rows = await Message.find(filter, "content createdAt +sender").sort({ _id: -1 }).limit(limit + 1).lean();
   const hasMore = rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;
   return { items, nextCursor: hasMore ? String(items[items.length - 1]._id) : null };

@@ -104,4 +104,35 @@ describe("api client", () => {
     expect((init.body as FormData).has("pp")).toBe(true);
     expect(init.headers["Content-Type"]).toBeUndefined();
   });
+
+  it("login: normal response -> {user}; 2FA response -> {twoStep,email} and NO user", async () => {
+    const { endpoints } = await load();
+    globalThis.fetch = vi.fn(async () => json(200, { message: "Logged in", data: { user: { id: "1", name: "A" } } })) as any;
+    expect(await endpoints.login("a@b.co", "pw")).toEqual({ user: { id: "1", name: "A" } });
+    globalThis.fetch = vi.fn(async () => json(200, { requiresTwoStepVerification: true, email: "a@b.co" })) as any;
+    expect(await endpoints.login("a@b.co", "pw")).toEqual({ twoStep: true, email: "a@b.co" });
+  });
+
+  it("wrong 2FA code (401 from /auth/verify-login-otp) surfaces the message and never triggers a refresh", async () => {
+    const { endpoints } = await load();
+    globalThis.fetch = vi.fn(async (u: any) => { calls.push(u); return json(401, { message: "Invalid or expired verification code" }); }) as any;
+    await expect(endpoints.verifyLoginOtp("a@b.co", "000000")).rejects.toMatchObject({ status: 401, message: "Invalid or expired verification code" });
+    expect(calls).toEqual(["/api/auth/verify-login-otp"]);
+  });
+
+  it("reveal/conversation calls hit the right endpoints with the right payloads", async () => {
+    const { endpoints } = await load();
+    const seen: { u: string; m?: string; b?: any }[] = [];
+    globalThis.fetch = vi.fn(async (u: any, i: any) => { seen.push({ u, m: i.method, b: i.body && JSON.parse(i.body) }); return json(200, { data: { status: "pending", conversationId: "c1", count: 2 } }); }) as any;
+    expect(await endpoints.requestReveal("m1")).toBe("pending");
+    expect(await endpoints.pendingCount()).toBe(2);
+    expect((await endpoints.acceptRequest("r1")).conversationId).toBe("c1");
+    await endpoints.declineRequest("r2");
+    expect(seen).toEqual([
+      { u: "/api/reveal-requests", m: "POST", b: { messageId: "m1" } },
+      { u: "/api/reveal-requests/pending-count", m: "GET", b: undefined },
+      { u: "/api/reveal-requests/r1/accept", m: "POST", b: undefined },
+      { u: "/api/reveal-requests/r2/decline", m: "POST", b: undefined },
+    ]);
+  });
 });

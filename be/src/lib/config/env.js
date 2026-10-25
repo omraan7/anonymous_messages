@@ -2,7 +2,11 @@ import { z } from "zod";
 
 // Validates every environment variable once, at startup. Fails fast with a
 // readable list of problems (variable NAMES only, never values).
-const optionalString = z.string().trim().optional().transform((v) => v || undefined);
+const optionalString = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => v || undefined);
 const bool = (def) =>
   z
     .enum(["true", "false"])
@@ -10,7 +14,9 @@ const bool = (def) =>
     .transform((v) => (v === undefined ? def : v === "true"));
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
   API_PREFIX: z.string().trim().default("/api"),
   // Comma separated list of browser origins allowed to call the API with cookies.
@@ -22,7 +28,10 @@ const envSchema = z.object({
 
   JWT_SECRET: z.string().trim().min(32, "must be at least 32 characters"),
   // Re-used as the HMAC "pepper" for hashing opaque refresh tokens and OTPs.
-  JWT_SECRET_refresh: z.string().trim().min(32, "must be at least 32 characters"),
+  JWT_SECRET_refresh: z
+    .string()
+    .trim()
+    .min(32, "must be at least 32 characters"),
 
   // Google Sign-In: the OAuth *Web client ID* whose ID tokens we accept.
   WEB_CLIENT_ID: optionalString,
@@ -66,14 +75,26 @@ export const env = {
   port: e.PORT,
   apiPrefix: e.API_PREFIX.replace(/\/+$/, ""),
   trustProxy: e.TRUST_PROXY,
-  frontendOrigins: e.FRONTEND_ORIGINS.split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean),
+  frontendOrigins: e.FRONTEND_ORIGINS.split(",")
+    .map((s) => s.trim().replace(/\/+$/, ""))
+    .filter(Boolean),
   db: { url: e.MONGODB_URI },
   jwt: { jwtSecret: e.JWT_SECRET, jwtSecret_refresh: e.JWT_SECRET_refresh },
   webClientId: e.WEB_CLIENT_ID,
   redis: e.REDIS_HOST
-    ? { host: e.REDIS_HOST, port: e.REDIS_PORT, password: e.REDIS_PASSWORD, tls: e.REDIS_TLS }
+    ? {
+        host: e.REDIS_HOST,
+        port: e.REDIS_PORT,
+        password: e.REDIS_PASSWORD,
+        tls: e.REDIS_TLS,
+      }
     : null,
-  smtp: { host: e.SMTP_HOST, port: e.SMTP_PORT, user: e.SMTP_USER, pass: e.SMTP_PASS },
+  smtp: {
+    host: e.SMTP_HOST,
+    port: e.SMTP_PORT,
+    user: e.SMTP_USER,
+    pass: e.SMTP_PASS,
+  },
   mailJet: {
     apiKey: e.MailJet_API_KEY,
     apiSecret: e.MailJet_API_SECRET,

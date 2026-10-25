@@ -7,8 +7,6 @@ import AppError from "../../utils/error/error.js";
 import { Session } from "../../app/auth/model/session.model.js";
 import { User } from "../../app/user/model/user.model.js";
 
-//issuer and audience for JWTs. 
-//These are not secrets, but they are used to prevent a token from being used in the wrong context.
 const ISS = "saraha";
 const AUD = "saraha-web";
 const b64 = (n) => crypto.randomBytes(n).toString("base64url");
@@ -45,7 +43,8 @@ async function cacheDel(...keys) {
   try {
     await cache.del(...keys);
   } catch {
-   }
+    /* bounded by sessionCacheTtlSec */
+  }
 }
 
 export function signAccessToken(userId, sid) {

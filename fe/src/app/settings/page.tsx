@@ -96,6 +96,41 @@ function PasswordCard() {
   );
 }
 
+function TwoStepCard() {
+  const { user, setUser } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
+  if (!user) return null;
+  const on = user.twoStepVerification === "enabled";
+  async function toggle() {
+    setBusy(true); setMsg(null);
+    try {
+      await endpoints.toggleTwoStep();
+      setUser(await endpoints.me()); // server is the source of truth for the new state
+      setMsg({ kind: "success", text: on ? "Two-step verification turned off." : "Two-step verification turned on." });
+    } catch (e) { setMsg({ kind: "error", text: errorText(e) }); }
+    finally { setBusy(false); }
+  }
+  return (
+    <section className="glass p-6" aria-labelledby="ts">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 id="ts" className="text-xl font-semibold">Two-step verification</h2>
+          <p className="mt-2 text-sm muted">
+            When on, logging in with your password also requires a 6-digit code we email you.
+            Signing in with Google is protected by your Google account instead.
+          </p>
+        </div>
+        <span className={`alert ${on ? "alert-success" : "alert-info"} shrink-0 !py-1 text-xs`} aria-live="polite">{on ? "On" : "Off"}</span>
+      </div>
+      {msg && <div className="mt-4"><Alert kind={msg.kind}>{msg.text}</Alert></div>}
+      <button className={`btn mt-4 ${on ? "btn-danger" : "btn-primary"}`} disabled={busy} onClick={toggle} aria-pressed={on}>
+        {busy ? <><Spinner /> Working…</> : on ? "Turn off" : "Turn on"}
+      </button>
+    </section>
+  );
+}
+
 function SessionsCard() {
   const router = useRouter();
   const { setUser } = useAuth();
@@ -125,7 +160,7 @@ export default function SettingsPage() {
     <div className="space-y-6" key={user.id}>
       <h1 className="text-4xl font-semibold">Settings</h1>
       <p className="muted">Signed in as {user.email}</p>
-      <AvatarCard /><NameCard /><PasswordCard /><SessionsCard />
+      <AvatarCard /><NameCard /><PasswordCard /><TwoStepCard /><SessionsCard />
     </div>
   );
 }

@@ -13,6 +13,8 @@ import { uploadRoot } from "./lib/storage/local.js";
 import authRouter from "./app/auth/auth.route.js";
 import userRouter from "./app/user/user.route.js";
 import messageRouter from "./app/message/message.route.js";
+import revealRouter from "./app/reveal/reveal.route.js";
+import conversationRouter from "./app/conversation/conversation.route.js";
 
 export function createApp() {
   const app = express();
@@ -65,6 +67,8 @@ export function createApp() {
   app.use(`${p}/auth`, authRouter);
   app.use(`${p}/user`, userRouter);
   app.use(`${p}/message`, messageRouter);
+  app.use(`${p}/reveal-requests`, revealRouter);
+  app.use(`${p}/conversations`, conversationRouter);
 
   app.use(notFound);
   app.use(errorHandler);

@@ -1,5 +1,6 @@
 import { User } from "./../../user/model/user.model.js";
 
+
 export const checkIfUserExists = (email, { withSecrets = false } = {}) => {
   const q = User.findOne({ email });
   return withSecrets ? q.select("+password +googleId") : q;

@@ -1,46 +1,155 @@
-# Saraha clone
+# Saraha Clone
 
-`be/` Express 5 + MongoDB + Redis · `fe/` Next.js 15. The browser talks only to the Next origin (`/api/*` is proxied to the backend), so session cookies are first-party.
+A full-stack Saraha clone built with Express, MongoDB, Redis, and Next.js.
 
-## Run locally
+The project supports anonymous messaging, authentication, session management, optional two-step verification, Google sign-in, message reveal requests, and private conversations.
+
+## Tech Stack
+
+- **Backend:** Express 5, MongoDB, Mongoose
+- **Frontend:** Next.js 15
+- **Caching & Session Tracking:** Redis
+- **Authentication:** JWT, refresh tokens, Google Identity Services
+- **Testing:** Backend and frontend test suites
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js and npm
+- MongoDB
+- Redis (optional for local development)
+
+### 1. Start the Backend
+
 ```bash
-# backend (needs MongoDB; Redis optional)
-cd be && cp .env.example .env   # fill in values
-npm install && npm run dev      # http://localhost:4000
-
-# frontend
-cd fe && cp .env.example .env.local
-npm install && npm run dev      # http://localhost:3000
+cd be
+npm install
+npm run dev
 ```
-Tests: `cd be && npm test` (needs `MONGODB_URI`, `REDIS_*`, both JWT secrets pointing at a **throwaway** DB/Redis — it deletes all users/messages!) · `cd fe && npm test`.
 
-## Auth model
-* Access token: JWT, 15 min, HS256, `iss`/`aud` checked, cookie `sa_at` (HttpOnly, SameSite=Lax).
-* Refresh token: 32 random bytes, cookie `sa_rt` (HttpOnly, SameSite=Strict, Path=`/api/auth`). Only an HMAC is stored (MongoDB `sessions`). Rotated on every refresh with an atomic compare-and-set. Replaying a rotated token after a 10 s grace window revokes the whole session.
-* Every access token carries a session id; each request checks the session is alive: Redis marker `saraha:v1:sess:<userId>:<sid>` (TTL ≤ 60 s), falling back to MongoDB on a miss or any Redis error. **Redis can never authenticate anyone by itself.**
-* Logout revokes the session and deletes the marker. Password reset/change revokes other sessions.
-* One browser = one active account; logging into another account retires the previous session.
+The backend runs at `http://localhost:4000`.
 
-## Google sign-in
-Frontend gets a Google ID token (Google Identity Services); backend verifies signature/audience/`email_verified`, identity = Google `sub`. Linking policy: a verified local account with the same verified email is linked; an *unverified* local account has its password wiped first (anti pre-registration hijack).
-Setup: Google Cloud Console → OAuth client (Web) → add **Authorized JavaScript origins** (`http://localhost:3000`, your prod origin). No redirect URI/secret is needed. Put the client ID in `WEB_CLIENT_ID` (be) and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (fe).
+### 2. Start the Frontend
 
-## Deployment notes
-* **Uploads use local disk** — fine for a VM/container with a persistent volume, **not** for Vercel/serverless. For those, add an object-storage driver with the same `save/remove/publicUrl` API as `be/src/lib/storage/local.js`.
-* Express is a long-running server; host it on Render/Railway/Fly/VM (or adapt for serverless). Set `FRONTEND_ORIGINS` to the exact frontend origin, `NODE_ENV=production` (enables Secure cookies, requires HTTPS), `TRUST_PROXY=1`.
-* Frontend (Vercel is fine): set `BACKEND_URL` to the backend's public URL.
-* Managed Redis usually needs `REDIS_TLS=true`.
+Open another terminal:
 
+```bash
+cd fe
+npm install
+npm run dev
+```
 
+The frontend runs at `http://localhost:3000`.
 
+The frontend sends API requests through `/api/*`, which Next.js proxies to the backend. This keeps browser requests on the frontend origin and allows session cookies to work as first-party cookies.
 
+## Authentication & Sessions
 
+- Access tokens are JWTs that expire after 15 minutes.
+- Refresh tokens are randomly generated and stored as HMAC hashes in MongoDB.
+- Refresh tokens rotate on use, with a short grace period to handle concurrent requests.
+- Each access token is tied to a session that is checked on every request.
+- Redis is used to cache session status, with MongoDB as the fallback.
+- Logging out revokes the current session.
+- Password changes and resets revoke other active sessions.
+- Logging into another account in the same browser retires the previous account's session.
 
+## Two-Step Verification
 
+Two-step verification can be enabled from the user's settings.
 
+When enabled, password-based login requires an additional six-digit code sent by email. The session is created only after the code is verified.
 
-===
-get all message 
-request sender to know who send the message
-create conversation between sender and receiver
-2-step verification
+Google sign-in does not use this additional step.
+
+## Anonymous Messages & Reveal Requests
+
+Recipients can request to find out who sent a message.
+
+- The sender can accept or decline the request.
+- Accepting reveals the sender's identity to the recipient and opens a private conversation.
+- Declining does not reveal the sender's identity.
+- Anonymous messages from visitors without an account can also receive reveal requests, but their identity cannot be revealed.
+- Messages from the other person are added to a conversation only after they accept the relevant request.
+
+Conversations include the sender's messages to the recipient and replies from both sides.
+
+## Google Sign-In Setup
+
+The frontend uses Google Identity Services to obtain an ID token. The backend verifies the token before signing the user in.
+
+To configure Google sign-in:
+
+1. Open the Google Cloud Console.
+2. Create or select an OAuth client ID for a web application.
+3. Add your frontend URL under **Authorized JavaScript origins**.
+4. Set the following environment variables:
+
+**Backend (`be`):**
+
+```env
+WEB_CLIENT_ID=your_google_client_id
+```
+
+**Frontend (`fe`):**
+
+```env
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
+```
+
+For local development, add `http://localhost:3000` as an authorized JavaScript origin. Add your production frontend origin when deploying.
+
+No redirect URI or client secret is required for this sign-in flow.
+
+## Running Tests
+
+### Backend
+
+```bash
+cd be
+npm test
+```
+
+The backend tests require a dedicated test database, the required Redis configuration, and both JWT secrets.
+
+**Important:** Use a disposable test database and Redis instance. The test suite deletes users and messages, so never run it against production data.
+
+### Frontend
+
+```bash
+cd fe
+npm test
+```
+
+## Deployment
+
+### Backend
+
+The Express backend is designed to run as a long-lived server. Suitable options include Render, Railway, Fly.io, or a virtual machine.
+
+Configure the following for production:
+
+- `FRONTEND_ORIGINS`: the exact frontend origin or origins allowed by the backend.
+- `NODE_ENV=production`: enables secure cookies, so HTTPS is required.
+- `TRUST_PROXY=1`: configure this when running behind a trusted reverse proxy.
+- `BACKEND_URL`: set this in the frontend environment to the backend's public URL.
+
+Use a managed Redis instance or another properly secured Redis deployment. Set `REDIS_TLS=true` when required by your Redis provider.
+
+### File Uploads
+
+Uploads currently use local disk storage. This works on servers or containers with persistent storage, but it is not suitable for Vercel serverless deployments.
+
+For serverless hosting, replace the local storage implementation with an object-storage provider that supports the same `save`, `remove`, and `publicUrl` interface.
+
+The frontend can be deployed to Vercel, while the backend runs on a separate hosting service.
+
+## Project Structure
+
+```text
+.
+├── be/    # Express API, authentication, database and storage
+└── fe/    # Next.js frontend
+```
+

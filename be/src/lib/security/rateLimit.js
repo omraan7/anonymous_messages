@@ -46,3 +46,5 @@ export const authLimiter = make("auth", 15 * 60_000, 20, "Too many attempts. Try
 export const otpLimiter = make("otp", 15 * 60_000, 10, "Too many code requests. Try again later.");
 export const messageLimiter = make("msg", 60 * 60_000, 30, "You're sending messages too quickly.");
 export const uploadLimiter = make("upload", 60 * 60_000, 20, "Too many uploads. Try again later.");
+export const revealLimiter = make("reveal", 60 * 60_000, 20, "Too many requests. Try again later.");
+export const chatLimiter = make("chat", 60 * 60_000, 200, "You're sending messages too quickly.");

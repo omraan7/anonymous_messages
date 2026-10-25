@@ -1,14 +1,20 @@
 import AppError from "../../../utils/error/error.js";
 import { getUserByPublicIdRepo } from "../../user/repo/user.repo.js";
 import { getAllMessagesByUserId, saveMessageInDb, softDeleteOwnMessage } from "../repo/message.repo.js";
+import { decorateInbox } from "../../reveal/service/reveal.service.js";
+import { touchIfRevealed } from "../../conversation/repo/conversation.repo.js";
 
 export const sendMessageService = async (content, receiverPublicId, senderId) => {
   const receiver = await getUserByPublicIdRepo(receiverPublicId);
   if (!receiver) throw new AppError("This profile doesn't exist", 404, { code: "NOT_FOUND" });
   await saveMessageInDb(content, receiver._id, senderId);
+  if (senderId) await touchIfRevealed(senderId, receiver._id); // keeps consented threads sorted by activity
 };
 
-export const getAllMessagesByUserIdService = (userId, query) => getAllMessagesByUserId(userId, query);
+export const getAllMessagesByUserIdService = async (userId, query) => {
+  const { items, nextCursor } = await getAllMessagesByUserId(userId, query);
+  return { items: await decorateInbox(userId, items), nextCursor };
+};
 
 export const deleteMessageService = async (id, userId) => {
   const doc = await softDeleteOwnMessage(id, userId);

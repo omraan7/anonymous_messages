@@ -21,7 +21,7 @@ export const getAllMessagesByUserIdController = async (req, res, next) => {
     const { items, nextCursor } = await getAllMessagesByUserIdService(req.user.id, query);
     res.status(200).json({
       message: "Messages fetched",
-      data: items.map((m) => ({ id: String(m._id), content: m.content, createdAt: m.createdAt })),
+      data: items,
       nextCursor,
     });
   } catch (e) { next(e); }
