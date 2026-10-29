@@ -2,7 +2,6 @@ import { Router } from "express";
 import * as c from "./controller/auth.controller.js";
 import { requireAuth } from "../../lib/auth/requireAuth.js";
 import { authLimiter, otpLimiter } from "../../lib/security/rateLimit.js";
-import { auth } from "google-auth-library";
 
 const authRouter = Router();
 

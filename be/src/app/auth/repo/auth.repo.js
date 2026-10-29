@@ -49,3 +49,40 @@ export async function updateAndGet(Model, filter, update) {
   if (!res.matchedCount) return null;
   return Model.findOne(filter);
 }
+
+
+export const recordFailedLoginAttempt = async (userId) => {
+  const user = await User.findByIdAndUpdate(
+    userId,
+    {
+      $inc: { failedLoginAttempts: 1 },
+    },
+    {
+      new: true,
+    },
+  );
+
+  if (!user) {
+    throw new Error("User not found while recording failed login");
+  }
+
+  if (user.failedLoginAttempts >= 3) {
+    return User.findByIdAndUpdate(
+      userId,
+      {
+        $set: { isBanned: true },
+      },
+      {
+        new: true,
+      },
+    );
+  }
+
+  return user;
+};
+
+export const resetFailedLoginAttempts = (userId) =>
+  User.updateOne(
+    { _id: userId, isBanned: false },
+    { $set: { failedLoginAttempts: 0 } },
+  );

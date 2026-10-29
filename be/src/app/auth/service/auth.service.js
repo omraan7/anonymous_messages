@@ -24,6 +24,8 @@ import {
   toggleTwoStepVerificationRepo,
   updateUserRepo,
   updateVerifiedStatusRepo,
+  recordFailedLoginAttempt,
+  resetFailedLoginAttempts,
 } from "../repo/auth.repo.js";
 
 const BCRYPT_ROUNDS = 12;
@@ -58,7 +60,7 @@ async function emailOtp(email, purpose) {
     email,
     subject,
     `<p>Your code is: <strong style="font-size:20px;letter-spacing:3px; color:#007bff  ">${code}</strong></p>
-     <p>It expires in 5 minutes. If you did not request it, ignore this email.</p>`,
+    <p>It expires in 5 minutes. If you did not request it, ignore this email.</p>`,
   );
 }
 
@@ -66,6 +68,7 @@ async function emailOtp(email, purpose) {
 // so the endpoint cannot be used to discover who has an account.
 export const registerUserService = async ({ email, password, name }) => {
   const existing = await checkIfUserExists(email);
+  if (existing?.isBanned) return;
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
   if (!existing) {
@@ -77,12 +80,9 @@ export const registerUserService = async ({ email, password, name }) => {
     });
     await emailOtp(email, "verify");
   } else if (!existing.isVerified && existing.provider === "local") {
-    // Someone registered this email but never proved they own it. The latest
-    // registration wins (defeats "pre-registration" account hijacking).
     await updateUserRepo(existing._id, { name, password: passwordHash });
     await emailOtp(email, "verify");
   }
-  // verified account already exists -> send nothing, reveal nothing
 };
 
 export const verifyOtpService = async (email, code) => {
@@ -98,6 +98,12 @@ export const verifyOtpService = async (email, code) => {
 export const verifyLoginOtpService = async (email, code, meta) => {
   const user = await checkIfUserExists(email);
 
+  if (user?.isBanned) {
+    throw new AppError("Account is banned", 403, {
+      code: "ACCOUNT_BANNED",
+    });
+  }
+
   if (!user || user.isDeleted || !user.isVerified) {
     throw new AppError("Invalid or expired verification code", 401, {
       code: "INVALID_LOGIN_OTP",
@@ -111,7 +117,6 @@ export const verifyLoginOtpService = async (email, code, meta) => {
     });
   }
 
-  // Only an OTP issued for the login purpose is accepted here.
   const isValid = await consumeOtp(email, "login", code);
 
   if (!isValid) {
@@ -120,7 +125,6 @@ export const verifyLoginOtpService = async (email, code, meta) => {
     });
   }
 
-  // This is the first point where the login session is created.
   const session = await createSession(user, meta);
 
   return {
@@ -130,12 +134,32 @@ export const verifyLoginOtpService = async (email, code, meta) => {
 };
 
 export const loginService = async (email, password, meta) => {
-  const user = await checkIfUserExists(email, { withSecrets: true });
+  const user = await checkIfUserExists(email, {
+    withSecrets: true,
+  });
 
   const hash = user?.password || DUMMY_HASH;
   const match = await bcrypt.compare(password, hash);
 
+  if (user?.isBanned) {
+    throw new AppError("Account is banned", 403, {
+      code: "ACCOUNT_BANNED",
+    });
+  }
+
   if (!user || !user.password || !match || user.isDeleted) {
+    if (user && user.password && !user.isDeleted) {
+      const updatedUser = await recordFailedLoginAttempt(user._id);
+
+      if (updatedUser?.isBanned) {
+        throw new AppError(
+          "Account banned after 3 failed login attempts",
+          403,
+          { code: "ACCOUNT_BANNED" },
+        );
+      }
+    }
+
     throw BAD_CREDENTIALS();
   }
 
@@ -145,8 +169,8 @@ export const loginService = async (email, password, meta) => {
     });
   }
 
-  // Stop here when two-step verification is enabled.
-  // Do not create a session or issue tokens yet.
+  // Correct password: reset the failed-attempt counter.
+  await resetFailedLoginAttempts(user._id);
 
   if (user.twoStepVerification === "enabled") {
     await emailOtp(email, "login");
@@ -157,7 +181,6 @@ export const loginService = async (email, password, meta) => {
     };
   }
 
-  // Normal login: create the session and tokens.
   const session = await createSession(user, meta);
 
   return {
@@ -215,8 +238,6 @@ export const changePasswordService = async (
   });
 };
 
-
-
 export const refreshTokenService = (refreshToken, meta) =>
   rotateSession(refreshToken, meta);
 
@@ -238,28 +259,43 @@ export const twoStepVerificationService = async (userId) => {
   }
 };
 
-
-
 // ---------------------------- Google Sign-In -------------------------------------
 
 export const verifyAccountGoogleService = async (idToken, meta) => {
   const payload = await verifyAccountGoogle(idToken);
-  if (!payload.sub || !payload.email || payload.email_verified !== true)
+
+  if (!payload.sub || !payload.email || payload.email_verified !== true) {
     throw new AppError("Google account email is not verified", 403, {
       code: "GOOGLE_EMAIL_UNVERIFIED",
-    });
+    });  }
 
   const email = payload.email.trim().toLowerCase();
   let created = false;
   let user = await findByGoogleId(payload.sub);
 
+  if (user?.isBanned) {
+    throw new AppError("Account is banned", 403, {
+      code: "ACCOUNT_BANNED",
+    });
+  }
+
   if (!user) {
-    const byEmail = await checkIfUserExists(email, { withSecrets: true });
+    const byEmail = await checkIfUserExists(email, {
+      withSecrets: true,
+    });
+
+    // 2. Check the email account only if it exists.
+    if (byEmail?.isBanned) {
+      throw new AppError("Account is banned", 403, {
+        code: "ACCOUNT_BANNED",
+      });
+    }
+
     if (byEmail) {
-      if (byEmail.isDeleted)
+      if (byEmail.isDeleted) {
         throw new AppError("Account unavailable", 403, {
           code: "ACCOUNT_UNAVAILABLE",
-        });
+        });}
       if (byEmail.isVerified) {
         user = await linkGoogleRepo(byEmail._id, payload.sub);
       } else {
@@ -284,10 +320,19 @@ export const verifyAccountGoogleService = async (idToken, meta) => {
       created = true;
     }
   }
-  if (user.isDeleted)
+
+  // 4. Final account status check.
+  if (user.isBanned) {
+    throw new AppError("Account is banned", 403, {
+      code: "ACCOUNT_BANNED",
+    });
+  }
+
+  if (user.isDeleted) {
     throw new AppError("Account unavailable", 403, {
       code: "ACCOUNT_UNAVAILABLE",
-    });
+    });}
   const session = await createSession(user, meta);
+
   return { user, created, ...session };
 };

@@ -5,8 +5,20 @@ export const newPublicId = () => randomBytes(7).toString("base64url"); // ~9-10 
 
 const userSchema = new Schema(
   {
-    name: { type: String, required: true, minLength: 3, maxLength: 30, trim: true },
-    email: { type: String, required: true, unique: true, trim: true, lowercase: true },
+    name: {
+      type: String,
+      required: true,
+      minLength: 3,
+      maxLength: 30,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      lowercase: true,
+    },
     // Never returned by default queries; login explicitly selects it.
     password: {
       type: String,
@@ -19,18 +31,41 @@ const userSchema = new Schema(
     // Google account subject ("sub"). Account identity for Google is the sub, not the email.
     googleId: { type: String, unique: true, sparse: true, select: false },
     // Random, non-guessable id used in the public share link (/u/<publicId>).
-    publicId: { type: String, unique: true, sparse: true, default: newPublicId },
+    publicId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      default: newPublicId,
+    },
     avatar: {
       type: new Schema({ url: String, key: String }, { _id: false }),
       default: undefined,
     },
+    isBanned: {
+      type: Boolean,
+      default: false,
+    },
+    failedLoginAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     isDeleted: { type: Boolean, default: false },
     isVerified: { type: Boolean, default: false },
     // Email-OTP second step at login (toggled via PATCH /auth/two-step-verification).
-    twoStepVerification: { type: String, enum: ["enabled", "disabled"], default: "disabled" },
+    twoStepVerification: {
+      type: String,
+      enum: ["enabled", "disabled"],
+      default: "disabled",
+    },
     passwordChangedAt: { type: Date },
     dob: { type: Date },
-    gender: { type: String, enum: ["male", "female"], default: "male", required: true },
+    gender: {
+      type: String,
+      enum: ["male", "female"],
+      default: "male",
+      required: true,
+    },
   },
   { timestamps: { createdAt: true, updatedAt: true } },
 );

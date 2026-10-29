@@ -9,12 +9,12 @@ import MessageList from "@/components/MessageList";
 export default function HomePage() {
   const router = useRouter();
   const { user, loading } = useAuth();
-  useEffect(() => { if (!loading && !user) router.replace("/login"); }, [loading, user, router]);
+  useEffect(() => { if (!loading && !user) router.replace("/login"); },[loading, user, router]);
 
   if (loading || !user)
     return <div className="space-y-4" aria-busy="true"><div className="skeleton h-12 w-2/3" /><div className="skeleton h-28" /><div className="skeleton h-24" /></div>;
 
-  return (
+  return ( 
     <section className="space-y-8">
       <header className="rise">
         <h1 className="text-4xl font-semibold">Hello, {user.name.split(" ")[0]}</h1>

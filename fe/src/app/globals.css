@@ -4,8 +4,8 @@
    Classic ink + parchment-gold palette, restrained glass surfaces.
    Dark is the default; light follows the OS preference. */
 :root {
-  --bg: #0b1020;
-  --bg-glow-1: rgba(124, 140, 255, 0.16);
+  --bg: #0b1f20;
+  --bg-glow-1: rgba(124, 227, 255, 0.16);
   --bg-glow-2: rgba(200, 169, 106, 0.12);
   --surface: rgba(255, 255, 255, 0.06);
   --surface-strong: rgba(255, 255, 255, 0.1);
